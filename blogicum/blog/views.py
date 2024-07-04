@@ -1,57 +1,25 @@
 from django.contrib.auth import get_user_model
-from django.contrib.auth.mixins import (LoginRequiredMixin,
-                                        UserPassesTestMixin)
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views.generic import (CreateView, DeleteView, DetailView, ListView,
                                   UpdateView)
 
-from blog.forms import CommentForm, PostForm, UserUpdateForm
-from blog.models import Category, Comment, Post
+from blog.constants import NUMBER_OF_POSTS_ON_USER_PAGE
+from blog.forms import CommentForm, PostForm, ProfileForm
+from blog.mixins import (CommentModelMixin, OnlyAuthorMixin, PostModelMixin,
+                         ReturnToPostMixin, ReturnToProfileMixin,
+                         UserModelMixin)
+from blog.models import Category, Post
+from blog.utils import count_and_order
 
 User = get_user_model()
 
-NUMBER_OF_POSTS_ON_USER_PAGE = 10
-
-
-class PostModelMixin:
-    model = Post
-    template_name = 'blog/create.html'
-    form_class = PostForm
-    pk_url_kwarg = 'post_id'
-
-
-class CommentModelMixin:
-    model = Comment
-    template_name = 'blog/comment.html'
-    form_class = CommentForm
-    pk_url_kwarg = 'comment_id'
-
-
-class UserModelMixin:
-    model = User
-
-
-class OnlyAuthorMixin(UserPassesTestMixin):
-
-    def test_func(self):
-        object = self.get_object()
-        return object.author == self.request.user
-
-
-class ReturnToProfileMixin:
-
-    def get_success_url(self):
-        return reverse(
-            'blog:profile',
-            kwargs={'username': self.request.user}
-        )
-
 
 class PostCreateView(
-    PostModelMixin,
     LoginRequiredMixin,
+    PostModelMixin,
     ReturnToProfileMixin,
     CreateView
 ):
@@ -62,8 +30,9 @@ class PostCreateView(
 
 
 class PostUpdateView(
-    PostModelMixin,
+    LoginRequiredMixin,
     OnlyAuthorMixin,
+    PostModelMixin,
     UpdateView
 ):
 
@@ -75,8 +44,9 @@ class PostUpdateView(
 
 
 class PostDeleteView(
-    PostModelMixin,
+    LoginRequiredMixin,
     OnlyAuthorMixin,
+    PostModelMixin,
     ReturnToProfileMixin,
     DeleteView
 ):
@@ -92,20 +62,18 @@ class PostListView(PostModelMixin, ListView):
     paginate_by = NUMBER_OF_POSTS_ON_USER_PAGE
 
     def get_queryset(self):
-        return Post.published.annotate(
-            comment_count=Count('comments')
-        ).order_by('-pub_date')
+        return count_and_order()
 
 
 class PostDetailView(PostModelMixin, DetailView):
     template_name = 'blog/detail.html'
 
-    def get_queryset(self):
-        post = get_object_or_404(Post, id=self.kwargs['post_id'])
+    def get_object(self):
+        post = super().get_object()
         if post.author != self.request.user:
-            return Post.published.all()
+            return get_object_or_404(Post.published, id=self.kwargs['post_id'])
         else:
-            return Post.objects.all()
+            return post
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -115,41 +83,36 @@ class PostDetailView(PostModelMixin, DetailView):
 
 
 class CommentCreateView(
-    CommentModelMixin,
     LoginRequiredMixin,
+    CommentModelMixin,
+    ReturnToPostMixin,
     CreateView
 ):
-    publication = None
-
-    def dispatch(self, request, *args, **kwargs):
-        self.publication = get_object_or_404(Post, id=kwargs['post_id'])
-        return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
         form.instance.author = self.request.user
-        form.instance.post = self.publication
+        form.instance.post = get_object_or_404(Post, id=self.kwargs['post_id'])
         return super().form_valid(form)
 
 
 class CommentUpdateView(
-    CommentModelMixin,
+    LoginRequiredMixin,
     OnlyAuthorMixin,
+    CommentModelMixin,
+    ReturnToPostMixin,
     UpdateView
 ):
     pass
 
 
 class CommentDeleteView(
-    CommentModelMixin,
+    LoginRequiredMixin,
     OnlyAuthorMixin,
+    CommentModelMixin,
+    ReturnToPostMixin,
     DeleteView
 ):
-
-    def get_success_url(self):
-        return reverse(
-            'blog:post_detail',
-            kwargs={'post_id': self.object.post_id}
-        )
+    pass
 
 
 class ProfileListView(UserModelMixin, ListView):
@@ -157,17 +120,17 @@ class ProfileListView(UserModelMixin, ListView):
     paginate_by = NUMBER_OF_POSTS_ON_USER_PAGE
 
     def get_queryset(self):
-        if self.kwargs['username'] != self.request.user.username:
-            return Post.published.annotate(
-                comment_count=Count('comments')
-            ).filter(
-                author__username=self.kwargs['username']
-            ).order_by('-pub_date')
+        user = get_object_or_404(
+            User, username=self.kwargs['username'])
+        if user.username != self.request.user.username:
+            return count_and_order().filter(
+                author__username=user.username
+            )
         else:
             return Post.objects.annotate(
                 comment_count=Count('comments')
             ).filter(
-                author__username=self.kwargs['username']
+                author__username=user.username
             ).order_by('-pub_date')
 
     def get_context_data(self, **kwargs):
@@ -178,8 +141,8 @@ class ProfileListView(UserModelMixin, ListView):
         return context
 
 
-class ProfileUpdateView(UserModelMixin, LoginRequiredMixin, UpdateView):
-    form_class = UserUpdateForm
+class ProfileUpdateView(LoginRequiredMixin, UserModelMixin, UpdateView):
+    form_class = ProfileForm
     template_name = 'blog/user.html'
 
     def get_object(self):
@@ -188,7 +151,7 @@ class ProfileUpdateView(UserModelMixin, LoginRequiredMixin, UpdateView):
     def get_success_url(self):
         return reverse(
             'blog:profile',
-            kwargs={'username': self.object.username}
+            args=[self.object.username]
         )
 
 
@@ -198,11 +161,14 @@ class CategoryListlView(ListView):
     paginate_by = NUMBER_OF_POSTS_ON_USER_PAGE
 
     def get_queryset(self):
-        return Post.published.annotate(
-            comment_count=Count('comments')
-        ).filter(
-            category__slug=self.kwargs['category']
-        ).order_by('-pub_date')
+        category = get_object_or_404(
+            Category,
+            slug=self.kwargs['category'],
+            is_published=True
+        )
+        return count_and_order().filter(
+            category__slug=category.slug
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

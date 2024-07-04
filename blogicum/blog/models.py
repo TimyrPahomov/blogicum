@@ -2,7 +2,8 @@ from django.contrib.auth import get_user_model
 from django.db import models
 from django.urls import reverse
 
-from blog.custom_post_manager import PostQuerySet, PublishedPostManager
+from blog.constants import NUMBER_OF_CHARACTERS_IN_THE_NAME
+from blog.post_manager import PostQuerySet, PublishedPostManager
 
 User = get_user_model()
 
@@ -28,9 +29,10 @@ class Category(PublishedAndCreatedAtModel):
     slug = models.SlugField(
         'Идентификатор',
         unique=True,
-        help_text='Идентификатор страницы для URL; '
-        'разрешены символы латиницы, '
-        'цифры, дефис и подчёркивание.'
+        help_text=(
+            'Идентификатор страницы для URL; '
+            'разрешены символы латиницы, цифры, дефис и подчёркивание.'
+        )
     )
 
     class Meta:
@@ -38,7 +40,7 @@ class Category(PublishedAndCreatedAtModel):
         verbose_name_plural = 'Категории'
 
     def __str__(self):
-        return self.title
+        return self.title[:NUMBER_OF_CHARACTERS_IN_THE_NAME]
 
     def get_absolute_url(self):
         return reverse('blog:category', kwargs={'category': self.slug})
@@ -52,7 +54,7 @@ class Location(PublishedAndCreatedAtModel):
         verbose_name_plural = 'Местоположения'
 
     def __str__(self):
-        return self.name
+        return self.name[:NUMBER_OF_CHARACTERS_IN_THE_NAME]
 
 
 class Post(PublishedAndCreatedAtModel):
@@ -60,8 +62,10 @@ class Post(PublishedAndCreatedAtModel):
     text = models.TextField('Текст')
     pub_date = models.DateTimeField(
         'Дата и время публикации',
-        help_text='Если установить дату и время в будущем — '
-        'можно делать отложенные публикации.'
+        help_text=(
+            'Если установить дату и время в будущем — '
+            'можно делать отложенные публикации.'
+        )
     )
     author = models.ForeignKey(
         User,
@@ -97,25 +101,22 @@ class Post(PublishedAndCreatedAtModel):
         ordering = ('-pub_date',)
 
     def __str__(self):
-        return self.title
+        return self.title[:NUMBER_OF_CHARACTERS_IN_THE_NAME]
 
     def get_absolute_url(self):
-        return reverse('blog:post_detail', kwargs={'post_id': self.id})
+        return reverse('blog:post_detail', args=[self.id])
 
 
 class Comment(PublishedAndCreatedAtModel):
     text = models.TextField('Текст комментария')
-    post = models.ForeignKey(
-        Post,
-        on_delete=models.CASCADE,
-        related_name='comments',
-    )
+    post = models.ForeignKey(Post, on_delete=models.CASCADE)
     author = models.ForeignKey(User, on_delete=models.CASCADE)
 
     class Meta:
         verbose_name = 'комментарий'
         verbose_name_plural = 'Комментарии'
+        default_related_name = 'comments'
         ordering = ('created_at',)
 
-    def get_absolute_url(self):
-        return reverse('blog:post_detail', kwargs={'post_id': self.post_id})
+    def __str__(self):
+        return f"Комментарий от {self.author} к посту {self.post}."

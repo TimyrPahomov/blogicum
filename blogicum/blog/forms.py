@@ -7,7 +7,7 @@ from .models import Comment, Post
 User = get_user_model()
 
 
-class UserFormMixin(forms.ModelForm):
+class ProfileForm(forms.ModelForm):
     first_name = forms.CharField(
         max_length=50,
         label='Имя',
@@ -44,11 +44,23 @@ class UserFormMixin(forms.ModelForm):
         fields = ['first_name', 'last_name', 'email', 'username']
 
 
+class ProfileCreationForm(ProfileForm, UserCreationForm):
+    pass
+
+
 class PostForm(forms.ModelForm):
 
     class Meta:
         model = Post
-        fields = ('title', 'text', 'pub_date', 'image', 'location', 'category')
+        fields = (
+            'title',
+            'text',
+            'pub_date',
+            'image',
+            'location',
+            'category',
+            'is_published'
+        )
         widgets = {
             'pub_date': forms.widgets.DateTimeInput(
                 attrs={'type': 'datetime-local'}
@@ -62,10 +74,7 @@ class CommentForm(forms.ModelForm):
         model = Comment
         fields = ('text',)
 
-
-class UserCustomCreationForm(UserFormMixin, UserCreationForm):
-    pass
-
-
-class UserUpdateForm(UserFormMixin):
-    pass
+    def __init__(self, *args, **kwargs):
+        super(CommentForm, self).__init__(*args, **kwargs)
+        self.fields['text'].widget.attrs['cols'] = 10
+        self.fields['text'].widget.attrs['rows'] = 5
