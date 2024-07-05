@@ -72,8 +72,7 @@ class PostDetailView(PostModelMixin, DetailView):
         post = super().get_object()
         if post.author != self.request.user:
             return get_object_or_404(Post.published, id=self.kwargs['post_id'])
-        else:
-            return post
+        return post
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -122,16 +121,15 @@ class ProfileListView(UserModelMixin, ListView):
     def get_queryset(self):
         user = get_object_or_404(
             User, username=self.kwargs['username'])
-        if user.username != self.request.user.username:
+        if user != self.request.user:
             return count_and_order().filter(
-                author__username=user.username
+                author=user
             )
-        else:
-            return Post.objects.annotate(
-                comment_count=Count('comments')
-            ).filter(
-                author__username=user.username
-            ).order_by('-pub_date')
+        return Post.objects.annotate(
+            comment_count=Count('comments')
+        ).filter(
+            author=user
+        ).order_by('-pub_date')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -167,7 +165,7 @@ class CategoryListlView(ListView):
             is_published=True
         )
         return count_and_order().filter(
-            category__slug=category.slug
+            category=category
         )
 
     def get_context_data(self, **kwargs):

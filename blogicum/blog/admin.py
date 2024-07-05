@@ -8,6 +8,7 @@ class CommentInline(admin.StackedInline):
     extra = 0
 
 
+@admin.register(Post)
 class PostAdmin(admin.ModelAdmin):
     list_display = (
         'title',
@@ -31,6 +32,7 @@ class PostAdmin(admin.ModelAdmin):
     inlines = (CommentInline,)
 
 
+@admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
     list_display = (
         'title',
@@ -42,6 +44,7 @@ class CategoryAdmin(admin.ModelAdmin):
     list_filter = ('title', 'slug',)
 
 
+@admin.register(Location)
 class LocationAdmin(admin.ModelAdmin):
     list_display = (
         'name',
@@ -51,6 +54,7 @@ class LocationAdmin(admin.ModelAdmin):
     list_filter = ('name',)
 
 
+@admin.register(Comment)
 class CommentAdmin(admin.ModelAdmin):
     list_display = (
         'text',
@@ -59,9 +63,3 @@ class CommentAdmin(admin.ModelAdmin):
     )
     list_editable = ('is_published',)
     search_fields = ('author__username',)
-
-
-admin.site.register(Post, PostAdmin)
-admin.site.register(Category, CategoryAdmin)
-admin.site.register(Location, LocationAdmin)
-admin.site.register(Comment, CommentAdmin)
